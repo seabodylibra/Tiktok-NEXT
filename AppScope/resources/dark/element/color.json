@@ -2,31 +2,31 @@
   "color": [
     {
       "name": "start_window_background",
-      "value": "#FFFFFF"
+      "value": "#111114"
     },
     {
       "name": "page_background",
-      "value": "#FFFFFF"
+      "value": "#111114"
     },
     {
       "name": "control_background",
-      "value": "#F0F0F3"
+      "value": "#202025"
     },
     {
       "name": "primary_text",
-      "value": "#161618"
+      "value": "#F5F5F7"
     },
     {
       "name": "secondary_text",
-      "value": "#66666E"
+      "value": "#A8A8B0"
     },
     {
       "name": "muted_text",
-      "value": "#8A8A94"
+      "value": "#777780"
     },
     {
       "name": "disabled_text",
-      "value": "#B7B7C0"
+      "value": "#66666D"
     }
   ]
 }
