@@ -1,0 +1,22 @@
+# Generated files
+.hvigor/
+.idea/
+**/build/
+**/oh_modules/
+**/node_modules/
+local.properties
+*.log
+
+# Signing credentials and packages
+*.p12
+*.pfx
+*.jks
+*.keystore
+*.csr
+*.cer
+*.pem
+*.key
+*.p7b
+*.hap
+*.hsp
+*.app

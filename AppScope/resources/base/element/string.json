@@ -1,0 +1,7 @@
+{
+  "string": [
+    { "name": "app_name", "value": "TikTok Web" },
+    { "name": "module_desc", "value": "TikTok Web container" },
+    { "name": "ability_desc", "value": "Open TikTok Web" }
+  ]
+}
