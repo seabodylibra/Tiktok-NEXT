@@ -10,6 +10,7 @@ struct Index {
   private controllerReady: boolean = false;
 
   @StorageLink('systemDark') @Watch('onSystemThemeChanged') private isDark: boolean = false;
+  @StorageLink('windowTopInset') private windowTopInset: number = 0;
   @State private progress: number = 0;
   @State private isLoading: boolean = true;
   @State private hasLoadedOnce: boolean = false;
@@ -249,6 +250,7 @@ struct Index {
         .margin({ left: 12, bottom: 12 });
       }
     }
+    .padding({ top: this.windowTopInset })
     .width('100%')
     .height('100%')
     .backgroundColor($r('app.color.page_background'))
