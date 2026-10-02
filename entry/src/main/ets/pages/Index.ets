@@ -19,6 +19,8 @@ struct Index {
   @State private isLoading: boolean = true;
   @State private hasLoadedOnce: boolean = false;
   @State private loadFailed: boolean = false;
+  @State private httpError: number = 0;
+  @State private failedAddress: string = '';
   @State private isFullScreen: boolean = false;
   @State private menuOpen: boolean = false;
   @State private canGoBack: boolean = false;
@@ -93,6 +95,16 @@ struct Index {
     }
   }
 
+  private returnHome(): void {
+    this.menuOpen = false;
+    try { this.controller.loadUrl(TIKTOK_URL); }
+    catch { this.loadFailed = true; }
+  }
+
+  private safeAddress(address: string): string {
+    return address.split('?')[0].split('#')[0].replace(/^https?:\/\//, '').slice(0, 180);
+  }
+
   private reload(): void {
     this.menuOpen = false;
     this.loadFailed = false;
@@ -155,6 +167,8 @@ struct Index {
           this.isFullScreen = false;
         })
         .onPageBegin(() => {
+          this.httpError = 0;
+          this.failedAddress = '';
           this.isLoading = true;
           this.loadFailed = false;
           this.progress = 0;
@@ -170,6 +184,13 @@ struct Index {
           this.updateNavigationState();
           this.applyWebAppearance();
         })
+        .onHttpErrorReceive((event) => {
+          if (event && event.request.isMainFrame()) {
+            this.httpError = event.response.getResponseCode();
+            this.failedAddress = this.safeAddress(event.request.getRequestUrl());
+            this.isLoading = false;
+          }
+        })
         .onErrorReceive((event) => {
           if (event && event.request.isMainFrame()) {
             this.isLoading = false;
@@ -177,16 +198,20 @@ struct Index {
           }
         });
 
-      if (this.loadFailed) {
+      if (this.loadFailed || this.httpError >= 400) {
         Column({ space: 14 }) {
-          Text('暂时无法打开 TikTok')
+          Text(this.httpError >= 400 ? '网页请求失败 · ' + this.httpError : '暂时无法打开 TikTok')
             .fontSize(20)
             .fontWeight(FontWeight.Medium)
             .fontColor($r('app.color.primary_text'));
-          Text('网页加载失败，请检查网络后重试。')
+          Text(this.httpError >= 400 ? this.failedAddress + '\n登录未完成，请返回 TikTok。' : '网页加载失败，请检查网络后重试。')
             .fontSize(14)
             .fontColor($r('app.color.secondary_text'))
             .textAlign(TextAlign.Center);
+          Button('返回 TikTok')
+            .fontColor(Color.White)
+            .backgroundColor('#FE2C55')
+            .onClick(() => this.returnHome());
           Button('重新加载')
             .fontColor(Color.White)
             .backgroundColor('#FE2C55')
@@ -253,6 +278,12 @@ struct Index {
                 .fontColor($r('app.color.primary_text'))
                 .backgroundColor(Color.Transparent)
                 .onClick(() => this.toggleBrowsingMode());
+              Button('返回 TikTok 首页')
+                .width(136)
+                .height(44)
+                .fontColor($r('app.color.primary_text'))
+                .backgroundColor(Color.Transparent)
+                .onClick(() => this.returnHome());
               Button('刷新')
                 .width(136)
                 .height(44)
