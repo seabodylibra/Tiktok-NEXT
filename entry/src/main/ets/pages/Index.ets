@@ -3,6 +3,8 @@ import { createWebAdapterScript } from '../common/WebAdapter';
 
 const TIKTOK_URL: string = 'https://www.tiktok.com/';
 
+PersistentStorage.persistProp('desktopMode', false);
+
 @Entry
 @Component
 struct Index {
@@ -11,6 +13,8 @@ struct Index {
 
   @StorageLink('systemDark') @Watch('onSystemThemeChanged') private isDark: boolean = false;
   @StorageLink('windowTopInset') private windowTopInset: number = 0;
+  @StorageLink('desktopMode') private desktopMode: boolean = false;
+  private defaultUserAgent: string = '';
   @State private progress: number = 0;
   @State private isLoading: boolean = true;
   @State private hasLoadedOnce: boolean = false;
@@ -19,6 +23,25 @@ struct Index {
   @State private menuOpen: boolean = false;
   @State private canGoBack: boolean = false;
   @State private canGoForward: boolean = false;
+
+  private applyUserAgent(): void {
+    if (!this.controllerReady) { return; }
+    try {
+      if (!this.defaultUserAgent) { this.defaultUserAgent = this.controller.getUserAgent(); }
+      const version = this.defaultUserAgent.match(/Chrome\/([0-9.]+)/);
+      const engine = version ? version[1] : '';
+      const userAgent = engine ?
+        `Mozilla/5.0 (${this.desktopMode ? 'Windows NT 10.0; Win64; x64' : 'Linux; Android 12'}) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/${engine}${this.desktopMode ? '' : ' Mobile'} Safari/537.36` :
+        this.defaultUserAgent + (this.desktopMode ? '' : ' Mobile');
+      this.controller.setCustomUserAgent(userAgent);
+    } catch { console.warn('Unable to set the browsing mode.'); }
+  }
+
+  private toggleBrowsingMode(): void {
+    this.desktopMode = !this.desktopMode;
+    this.applyUserAgent();
+    this.reload();
+  }
 
   private onSystemThemeChanged(): void {
     this.applyWebAppearance();
@@ -118,6 +141,7 @@ struct Index {
         .backgroundColor($r('app.color.page_background'))
         .onControllerAttached(() => {
           this.controllerReady = true;
+          this.applyUserAgent();
           this.applyWebAppearance();
         })
         .onTouch(() => {
@@ -223,6 +247,12 @@ struct Index {
                 .fontColor(this.canGoForward ? $r('app.color.primary_text') : $r('app.color.disabled_text'))
                 .backgroundColor(Color.Transparent)
                 .onClick(() => this.goForward());
+              Button(this.desktopMode ? '切换移动模式' : '切换桌面模式')
+                .width(136)
+                .height(44)
+                .fontColor($r('app.color.primary_text'))
+                .backgroundColor(Color.Transparent)
+                .onClick(() => this.toggleBrowsingMode());
               Button('刷新')
                 .width(136)
                 .height(44)
