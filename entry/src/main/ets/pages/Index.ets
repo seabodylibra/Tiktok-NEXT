@@ -1,3 +1,4 @@
+import { saveWebSession } from '../common/WebSession';
 import { webview } from '@kit.ArkWeb';
 import { createWebAdapterScript } from '../common/WebAdapter';
 
@@ -15,8 +16,43 @@ struct Index {
   @State private popupAddress: string = '';
   @State private popupFailed: boolean = false;
   @State private popupProgress: number = 0;
+  @State private networkDetail: string = '';
+  @State private diagnosticsOpen: boolean = false;
+  private cookieTimer: number = -1;
+
+  onPageShow(): void {
+    if (this.cookieTimer < 0) {
+      // SPA login can set cookies without a navigation/page-end event.
+      this.cookieTimer = setInterval(() => saveWebSession(), 15000);
+    }
+  }
+
+  onPageHide(): void {
+    this.stopCookieTimer();
+    saveWebSession();
+  }
+
+  aboutToDisappear(): void {
+    this.stopCookieTimer();
+    saveWebSession();
+  }
+
+  private stopCookieTimer(): void {
+    if (this.cookieTimer >= 0) { clearInterval(this.cookieTimer); }
+    this.cookieTimer = -1;
+  }
+
+  private recordNetworkError(address: string, code: number, source: string): void {
+    // Keep only the host: URLs can contain OAuth codes or account information.
+    const host = address.match(/^https?:\/\/([^/?#]+)/);
+    if (!host) { return; }
+    const detail = source + ' · ' + code + ' · ' + host[1];
+    this.networkDetail = (detail + '\n' + this.networkDetail).split('\n').slice(0, 6).join('\n');
+  }
+
 
   private closePopup(): void {
+    saveWebSession();
     this.popupOpen = false;
     this.menuOpen = false;
     // Keep the opener alive: the callback can notify it via postMessage.
@@ -142,6 +178,7 @@ struct Index {
   }
 
   onBackPress(): boolean {
+    if (this.diagnosticsOpen) { this.diagnosticsOpen = false; return true; }
     if (this.popupOpen) {
       this.popupBack();
       return true;
@@ -221,6 +258,7 @@ struct Index {
           this.progress = event.newProgress;
         })
         .onPageEnd(() => {
+          saveWebSession();
           this.isLoading = false;
           this.hasLoadedOnce = true;
           this.loadFailed = false;
@@ -228,6 +266,9 @@ struct Index {
           this.applyWebAppearance();
         })
         .onHttpErrorReceive((event) => {
+          if (event && event.response.getResponseCode() >= 400) {
+            this.recordNetworkError(event.request.getRequestUrl(), event.response.getResponseCode(), 'HTTP');
+          }
           if (event && event.request.isMainFrame()) {
             this.httpError = event.response.getResponseCode();
             this.failedAddress = this.safeAddress(event.request.getRequestUrl());
@@ -235,6 +276,9 @@ struct Index {
           }
         })
         .onErrorReceive((event) => {
+          if (event) {
+            this.recordNetworkError(event.request.getRequestUrl(), event.error.getErrorCode(), '网络');
+          }
           if (event && event.request.isMainFrame()) {
             this.isLoading = false;
             this.loadFailed = true;
@@ -327,6 +371,11 @@ struct Index {
                 .fontColor($r('app.color.primary_text'))
                 .backgroundColor(Color.Transparent)
                 .onClick(() => this.returnHome());
+              Button('网络诊断')
+                .width(136).height(44)
+                .fontColor($r('app.color.primary_text'))
+                .backgroundColor(Color.Transparent)
+                .onClick(() => { this.diagnosticsOpen = true; this.menuOpen = false; });
               Button('刷新')
                 .width(136)
                 .height(44)
@@ -383,7 +432,7 @@ struct Index {
               })
               .onControllerAttached(() => {
                 try {
-                  this.popupController.setCustomUserAgent(this.controller.getUserAgent());
+                  this.popupController.setCustomUserAgent(this.controller.getCustomUserAgent() || this.controller.getUserAgent());
                 } catch {}
               })
               .onWindowExit(() => this.closePopup())
@@ -393,13 +442,20 @@ struct Index {
                 if (event) { this.popupAddress = this.safeAddress(event.url); }
               })
               .onPageEnd((event) => {
+                saveWebSession();
                 if (event) { this.popupAddress = this.safeAddress(event.url); }
               })
               .onProgressChange((event) => { this.popupProgress = event.newProgress; })
               .onErrorReceive((event) => {
+          if (event) {
+            this.recordNetworkError(event.request.getRequestUrl(), event.error.getErrorCode(), '网络');
+          }
                 if (event && event.request.isMainFrame()) { this.popupFailed = true; }
               })
               .onHttpErrorReceive((event) => {
+          if (event && event.response.getResponseCode() >= 400) {
+            this.recordNetworkError(event.request.getRequestUrl(), event.response.getResponseCode(), 'HTTP');
+          }
                 if (event && event.request.isMainFrame() && event.response.getResponseCode() >= 400) {
                   this.popupFailed = true;
                 }
@@ -420,6 +476,19 @@ struct Index {
           }.layoutWeight(1).width('100%');
         }
         .width('100%').height('100%')
+        .backgroundColor($r('app.color.page_background'));
+      }
+      if (this.diagnosticsOpen) {
+        Column({ space: 16 }) {
+          Text('最近的请求错误').fontSize(20).fontColor($r('app.color.primary_text'));
+          Text(this.networkDetail || '尚未捕获请求错误。网站提示的 network error 也可能来自业务接口返回。')
+            .fontSize(14).fontColor($r('app.color.primary_text'));
+          Text('记录仅含错误码和域名；部分资源失败不一定影响登录。')
+            .fontSize(12).fontColor($r('app.color.secondary_text'));
+          Button('关闭').onClick(() => { this.diagnosticsOpen = false; });
+        }
+        .padding(24).width('100%').height('100%')
+        .justifyContent(FlexAlign.Center)
         .backgroundColor($r('app.color.page_background'));
       }
     }

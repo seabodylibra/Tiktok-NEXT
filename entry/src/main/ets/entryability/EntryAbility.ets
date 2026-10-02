@@ -1,3 +1,4 @@
+import { configureWebSession, saveWebSession } from '../common/WebSession';
 import { Configuration, ConfigurationConstant, UIAbility } from '@kit.AbilityKit';
 import { window } from '@kit.ArkUI';
 
@@ -40,6 +41,7 @@ export default class EntryAbility extends UIAbility {
   }
 
   onWindowStageCreate(windowStage: window.WindowStage): void {
+    configureWebSession();
     this.syncWindowTheme(this.context.config.colorMode);
     try {
       windowStage.loadContent('pages/Index')
@@ -65,7 +67,12 @@ export default class EntryAbility extends UIAbility {
     this.syncWindowTheme(this.context.config.colorMode);
   }
 
+  onBackground(): void {
+    saveWebSession();
+  }
+
   onWindowStageDestroy(): void {
+    saveWebSession();
     this.mainWindow?.off('avoidAreaChange', this.updateSafeArea);
     this.mainWindow = undefined;
   }
