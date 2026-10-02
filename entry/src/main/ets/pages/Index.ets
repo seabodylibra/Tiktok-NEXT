@@ -10,6 +10,29 @@ PersistentStorage.persistProp('desktopMode', false);
 struct Index {
   private controller: webview.WebviewController = new webview.WebviewController();
   private controllerReady: boolean = false;
+  private popupController: webview.WebviewController = new webview.WebviewController();
+  @State private popupOpen: boolean = false;
+  @State private popupAddress: string = '';
+  @State private popupFailed: boolean = false;
+  @State private popupProgress: number = 0;
+
+  private closePopup(): void {
+    this.popupOpen = false;
+    this.menuOpen = false;
+    // Keep the opener alive: the callback can notify it via postMessage.
+    this.updateNavigationState();
+  }
+
+  private popupBack(): void {
+    try {
+      if (this.popupController.accessBackward()) {
+        this.popupController.backward();
+        return;
+      }
+    } catch {}
+    this.closePopup();
+  }
+
 
   @StorageLink('systemDark') @Watch('onSystemThemeChanged') private isDark: boolean = false;
   @StorageLink('windowTopInset') private windowTopInset: number = 0;
@@ -119,6 +142,10 @@ struct Index {
   }
 
   onBackPress(): boolean {
+    if (this.popupOpen) {
+      this.popupBack();
+      return true;
+    }
     if (this.menuOpen) {
       this.menuOpen = false;
       return true;
@@ -142,6 +169,22 @@ struct Index {
         .expandSafeArea([SafeAreaType.SYSTEM], [SafeAreaEdge.BOTTOM])
         .javaScriptAccess(true)
         .domStorageAccess(true)
+        .multiWindowAccess(true)
+        .onWindowNew((event) => {
+          if (!event) { return; }
+          if (this.popupOpen) {
+            event.handler.setWebController(null);
+            return;
+          }
+          this.popupController = new webview.WebviewController();
+          this.popupFailed = false;
+          this.popupProgress = 0;
+          this.popupAddress = this.safeAddress(event.targetUrl);
+          this.menuOpen = false;
+          this.popupOpen = true;
+          // Bind the actual child window; loading targetUrl loses window.opener.
+          event.handler.setWebController(this.popupController);
+        })
         .fileAccess(false)
         .geolocationAccess(false)
         .darkMode(WebDarkMode.Auto)
@@ -254,7 +297,7 @@ struct Index {
           .align(Alignment.Top);
       }
 
-      if (!this.isFullScreen) {
+      if (!this.isFullScreen && !this.popupOpen) {
         Column({ space: 8 }) {
           if (this.menuOpen) {
             Column({ space: 4 }) {
@@ -309,6 +352,75 @@ struct Index {
         }
         .alignItems(HorizontalAlign.Start)
         .margin({ left: 12, bottom: 12 });
+      }
+      if (this.popupOpen) {
+        Column() {
+          Row({ space: 12 }) {
+            Button('返回').onClick(() => this.popupBack());
+            Text(this.popupAddress || '正在打开登录页面')
+              .fontSize(12)
+              .fontColor($r('app.color.primary_text'))
+              .maxLines(1)
+              .textOverflow({ overflow: TextOverflow.Ellipsis })
+              .layoutWeight(1);
+            Button('关闭').onClick(() => this.closePopup());
+          }
+          .width('100%')
+          .padding(8);
+          Progress({ value: this.popupProgress, total: 100, type: ProgressType.Linear })
+            .width('100%').height(2).color('#FE2C55');
+          Stack() {
+            // An empty src lets ArkWeb populate the child from onWindowNew.
+            Web({ src: '', controller: this.popupController })
+              .width('100%').height('100%')
+              .javaScriptAccess(true)
+              .domStorageAccess(true)
+              .fileAccess(false)
+              .geolocationAccess(false)
+              .multiWindowAccess(true)
+              .onWindowNew((event) => {
+                if (event) { event.handler.setWebController(null); }
+              })
+              .onControllerAttached(() => {
+                try {
+                  this.popupController.setCustomUserAgent(this.controller.getUserAgent());
+                } catch {}
+              })
+              .onWindowExit(() => this.closePopup())
+              .onPageBegin((event) => {
+                this.popupFailed = false;
+                this.popupProgress = 0;
+                if (event) { this.popupAddress = this.safeAddress(event.url); }
+              })
+              .onPageEnd((event) => {
+                if (event) { this.popupAddress = this.safeAddress(event.url); }
+              })
+              .onProgressChange((event) => { this.popupProgress = event.newProgress; })
+              .onErrorReceive((event) => {
+                if (event && event.request.isMainFrame()) { this.popupFailed = true; }
+              })
+              .onHttpErrorReceive((event) => {
+                if (event && event.request.isMainFrame() && event.response.getResponseCode() >= 400) {
+                  this.popupFailed = true;
+                }
+              });
+            if (this.popupFailed) {
+              Column({ space: 14 }) {
+                Text('登录页面加载失败').fontColor($r('app.color.primary_text'));
+                Button('重试').onClick(() => {
+                  this.popupFailed = false;
+                  try { this.popupController.refresh(); } catch { this.popupFailed = true; }
+                });
+                Button('返回 TikTok').onClick(() => this.closePopup());
+              }
+              .width('100%').height('100%')
+              .justifyContent(FlexAlign.Center)
+              .backgroundColor($r('app.color.page_background'));
+            }
+          }.layoutWeight(1).width('100%');
+        }
+        .width('100%').height('100%')
+        .backgroundColor($r('app.color.page_background'));
       }
     }
     .padding({ top: this.windowTopInset })
